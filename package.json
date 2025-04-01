@@ -19,12 +19,7 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": [
-    "payment",
-    "paystack",
-    "express",
-    "api""
-  ],
+  "keywords": ["payment", "paystack", "express", "api"],
   "author": "GamerzHub",
   "license": "MIT"
 }
