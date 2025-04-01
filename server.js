@@ -15,13 +15,19 @@ const PORT = process.env.PORT || 3000
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// Middleware
+// Enhanced CORS configuration - allow requests from any origin
 app.use(
   cors({
-    origin: ["https://gamerzhubgh.web.app", "http://localhost:3000", "*"],
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
     credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   }),
 )
+
+// Body parsers
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
@@ -49,6 +55,8 @@ function paystackRequest(method, path, data = null) {
       },
     }
 
+    console.log(`Making ${method} request to Paystack: ${path}`)
+
     const req = https.request(options, (res) => {
       let responseData = ""
 
@@ -59,18 +67,22 @@ function paystackRequest(method, path, data = null) {
       res.on("end", () => {
         try {
           const parsedData = JSON.parse(responseData)
+          console.log("Paystack response:", parsedData)
           resolve(parsedData)
         } catch (error) {
+          console.error("Failed to parse Paystack response:", error, "Raw response:", responseData)
           reject(new Error(`Failed to parse Paystack response: ${error.message}`))
         }
       })
     })
 
     req.on("error", (error) => {
+      console.error("Paystack request error:", error)
       reject(new Error(`Paystack request failed: ${error.message}`))
     })
 
     if (data) {
+      console.log("Sending data to Paystack:", data)
       req.write(JSON.stringify(data))
     }
 
@@ -80,10 +92,13 @@ function paystackRequest(method, path, data = null) {
 
 // Initialize payment
 app.post("/api/payment/initialize", async (req, res) => {
+  console.log("Payment initialization request received:", req.body)
+
   try {
     const { email, amount, metadata, tournamentId, registrationId } = req.body
 
     if (!email || !amount) {
+      console.log("Missing required fields:", { email, amount })
       return res.status(400).json({
         status: false,
         message: "Email and amount are required",
@@ -92,11 +107,6 @@ app.post("/api/payment/initialize", async (req, res) => {
 
     // Convert amount to pesewa (Paystack uses pesewa for GHS, which is 1/100 of a Cedi)
     const amountInPesewa = Math.floor(Number.parseFloat(amount) * 100)
-
-    // Get the host from the request
-    const host = req.headers.host
-    const protocol = req.headers["x-forwarded-proto"] || "http"
-    const baseUrl = `${protocol}://${host}`
 
     // Construct callback URL with all necessary parameters
     const callbackUrl = `https://gamerzhubgh.web.app/payment-callback.html?tournamentId=${tournamentId || ""}&registrationId=${registrationId || ""}`
@@ -124,7 +134,7 @@ app.post("/api/payment/initialize", async (req, res) => {
     console.error("Payment initialization error:", error)
     return res.status(500).json({
       status: false,
-      message: "Failed to initialize payment",
+      message: "Failed to initialize payment: " + error.message,
       error: error.message,
     })
   }
@@ -132,10 +142,13 @@ app.post("/api/payment/initialize", async (req, res) => {
 
 // Verify payment
 app.get("/api/payment/verify", async (req, res) => {
+  console.log("Payment verification request received:", req.query)
+
   try {
     const { reference } = req.query
 
     if (!reference) {
+      console.log("Missing reference parameter")
       return res.status(400).json({
         status: false,
         message: "Payment reference is required",
@@ -158,7 +171,7 @@ app.get("/api/payment/verify", async (req, res) => {
     console.error("Payment verification error:", error)
     return res.status(500).json({
       status: false,
-      message: "Failed to verify payment",
+      message: "Failed to verify payment: " + error.message,
       error: error.message,
     })
   }
@@ -180,9 +193,9 @@ app.get("/", (req, res) => {
 // Redirect payment callback to frontend
 app.get("/payment-callback", (req, res) => {
   const { reference, tournamentId, registrationId } = req.query
-  res.redirect(
-    `https://gamerzhubgh.web.app/payment-callback.html?reference=${reference || ""}&tournamentId=${tournamentId || ""}&registrationId=${registrationId || ""}`,
-  )
+  const redirectUrl = `https://gamerzhubgh.web.app/payment-callback.html?reference=${reference || ""}&tournamentId=${tournamentId || ""}&registrationId=${registrationId || ""}`
+  console.log("Redirecting to:", redirectUrl)
+  res.redirect(redirectUrl)
 })
 
 // Health check endpoint
@@ -190,9 +203,21 @@ app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "ok", message: "Server is running" })
 })
 
+// Test endpoint to check if server is accessible
+app.get("/api/test", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    message: "Test endpoint is working",
+    timestamp: new Date().toISOString(),
+  })
+})
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`)
+  console.log(`Server URL: http://localhost:${PORT}`)
+  console.log(`Health check: http://localhost:${PORT}/api/health`)
+  console.log(`Test endpoint: http://localhost:${PORT}/api/test`)
 })
 
 // Handle uncaught exceptions
