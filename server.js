@@ -1,9 +1,9 @@
-const express = require("express")
-const cors = require("cors")
-const bodyParser = require("body-parser")
-const https = require("https")
-const dotenv = require("dotenv")
-const path = require("path")
+import express from "express"
+import cors from "cors"
+import https from "https"
+import dotenv from "dotenv"
+import path from "path"
+import { fileURLToPath } from "url"
 
 // Load environment variables
 dotenv.config()
@@ -11,17 +11,29 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 // Middleware
-app.use(cors())
-app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({ extended: true }))
+app.use(
+  cors({
+    origin: ["https://gamerzhub.web.app", "http://localhost:3000"],
+    credentials: true,
+  }),
+)
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 app.use(express.static(path.join(__dirname, "public")))
 
 // Verify Paystack secret key is available
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY
 if (!PAYSTACK_SECRET_KEY) {
   console.error("PAYSTACK_SECRET_KEY is not set in environment variables")
-  process.exit(1)
+  // Don't exit in production, just log the error
+  if (process.env.NODE_ENV !== "production") {
+    process.exit(1)
+  }
 }
 
 // Helper function to make Paystack API requests
@@ -158,8 +170,8 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"))
 })
 
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "admin.html"))
+app.get("/payment-callback", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "payment-callback.html"))
 })
 
 // Health check endpoint
@@ -182,5 +194,5 @@ process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason)
 })
 
-module.exports = app
+export default app
 
