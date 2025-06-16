@@ -47,8 +47,8 @@ app.use(
         CONFIG.frontendUrl,
         "http://localhost:3000",
         "http://localhost:8080",
-        "https://pbmdatahub.web.app/pbmagent",
-        "https://pbmdatahub.web.app",
+        "https://pbmdatahub.pro",
+        "https://reseller.pbmdatahub.pro",
         "https://pbmdatahub.firebaseapp.com",
       ]
 
