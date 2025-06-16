@@ -47,11 +47,12 @@ app.use(
         CONFIG.frontendUrl,
         "http://localhost:3000",
         "http://localhost:8080",
-        "https://pbmdatahub.web.app/index.html",
+        "https://pbmserver46.onrender.com",
         "https://pbmdatahub.web.app",
         "https://pbmdatahub.firebaseapp.com",
-        "https://reseller.pbmdatahub.pro",
         "https://pbmdatahub.pro",
+        "https://reseller.pbmdatahub.pro",
+        "https://gamerzhub-zgua.onrender.com",
       ]
 
       if (allowedOrigins.includes(origin) || CONFIG.nodeEnv === "development") {
