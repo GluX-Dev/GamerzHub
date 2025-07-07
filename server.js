@@ -42,7 +42,87 @@ if (!CONFIG.hubnetApiKey || !CONFIG.paystackSecretKey) {
   process.exit(1)
 }
 
+
+// --- Firebase Setup ---
+import firebase from "firebase-admin"
+if (!firebase.apps.length) {
+  firebase.initializeApp({
+    credential: firebase.credential.applicationDefault(),
+    databaseURL: process.env.FIREBASE_DB_URL || "https://pbmdatahub-default-rtdb.firebaseio.com"
+  })
+}
+
 const app = express()
+// --- API Key Middleware for External API ---
+app.use("/api/external", async (req, res, next) => {
+  const apiKey = req.headers["x-api-key"]
+  if (!apiKey) {
+    return res.status(401).json({ status: "error", message: "Missing API key" })
+  }
+  try {
+    const snap = await firebase.database().ref("apiKeys/" + apiKey).once("value")
+    if (!snap.exists()) {
+      return res.status(403).json({ status: "error", message: "Invalid API key" })
+    }
+    req.apiUser = snap.val()
+    next()
+  } catch (e) {
+    res.status(500).json({ status: "error", message: "API key check failed" })
+  }
+})
+
+// --- Helper: Get Price for Bundle ---
+function getPriceForBundle(network, volume) {
+  // You can update these prices as needed
+  const prices = {
+    mtn: { "1000": 5.4, "2000": 10.3, "3000": 13.8, "4000": 18.8, "5000": 23.3, "6000": 27.3, "8000": 35.8, "10000": 43.5, "15000": 63.5, "20000": 84.5, "25000": 106.5, "30000": 124.5 },
+    at: { "1000": 4.9, "2000": 8.8, "3000": 12.8, "4000": 14.8, "5000": 21.8, "6000": 24.8, "8000": 30.8, "10000": 41.5, "15000": 59.5, "20000": 79.5, "25000": 102.5, "30000": 119.5 }
+  }
+  return prices[network]?.[volume] || null
+}
+
+// --- External API: Buy Data Bundle ---
+app.post("/api/external/buy-data", async (req, res) => {
+  const { network, phone, volume } = req.body
+  const apiUser = req.apiUser
+  if (!network || !phone || !volume) {
+    return res.status(400).json({ status: "error", message: "Missing required fields" })
+  }
+  if (!["mtn", "at"].includes(network)) {
+    return res.status(400).json({ status: "error", message: "Invalid network" })
+  }
+  if (!/^\d{10}$/.test(phone)) {
+    return res.status(400).json({ status: "error", message: "Invalid phone number" })
+  }
+  const price = getPriceForBundle(network, volume)
+  if (!price) {
+    return res.status(400).json({ status: "error", message: "Invalid bundle volume" })
+  }
+  // Check user balance
+  const walletRef = firebase.database().ref("wallets/" + apiUser.userId)
+  const walletSnap = await walletRef.once("value")
+  const balance = walletSnap.exists() ? walletSnap.val().balance : 0
+  if (balance < price) {
+    return res.status(402).json({ status: "error", message: "Insufficient balance" })
+  }
+  // Deduct balance
+  await walletRef.update({ balance: balance - price })
+  // Process transaction
+  const reference = generateReference(network.toUpperCase() + "_API")
+  const hubnetPayload = { phone, volume: volume.toString(), reference, referrer: phone }
+  try {
+    const hubnetData = await processHubnetTransaction(hubnetPayload, network)
+    // Record order in Firebase
+    await firebase.database().ref("orders/" + apiUser.userId).push({
+      network, phone, volume, amount: price, reference, status: "completed", timestamp: Date.now()
+    })
+    res.json({ status: "success", data: { reference, hubnetData } })
+  } catch (err) {
+    // Refund balance if processing fails
+    await walletRef.update({ balance: balance })
+    res.status(500).json({ status: "error", message: "Failed to process bundle", error: err.message })
+  }
+})
 
 app.set("trust proxy", 1)
 
